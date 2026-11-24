@@ -34,9 +34,10 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthPage = AUTH_PAGES.includes(pathname);
-  const isAuthApi = pathname.startsWith("/api/auth/");
+  // API は各 Route Handler が 401 を返すので、ここではリダイレクトしない
+  const isApi = pathname.startsWith("/api/");
 
-  if (!user && !isAuthPage && !isAuthApi) {
+  if (!user && !isAuthPage && !isApi) {
     return redirectWithCookies(request, response, "/login");
   }
   if (user && isAuthPage) {
