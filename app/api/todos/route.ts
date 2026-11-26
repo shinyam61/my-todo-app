@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { errorJson, TITLE_MAX_LENGTH, toTodo } from "@/lib/todos";
+import { isValidDateString } from "@/lib/due-date";
+import { errorJson, TITLE_MAX_LENGTH, toDbDate, toTodo } from "@/lib/todos";
 
 // ---- API の型（画面側は import type で使う） ----
 
@@ -9,6 +10,7 @@ export type Todo = {
   id: string;
   title: string;
   isCompleted: boolean;
+  dueDate: string | null; // "YYYY-MM-DD"。期限なしは null
   createdAt: string; // ISO 8601
 };
 
@@ -16,7 +18,11 @@ export type ErrorResponse = { error: string };
 
 export type GetTodosResponse = { todos: Todo[] };
 
-export type CreateTodoRequest = { title: string };
+export type CreateTodoRequest = {
+  title: string;
+  /** 期限日 "YYYY-MM-DD"（画面のローカル日付で計算したもの）。期限なしは null または省略 */
+  dueDate?: string | null;
+};
 export type CreateTodoResponse = { todo: Todo };
 
 // ---- ハンドラー ----
@@ -49,9 +55,18 @@ export async function POST(request: NextRequest) {
     return errorJson(`タイトルは${TITLE_MAX_LENGTH}文字以内にしてください。`, 400);
   }
 
+  const dueDate = body?.dueDate ?? null;
+  if (dueDate !== null && (typeof dueDate !== "string" || !isValidDateString(dueDate))) {
+    return errorJson("期限日の形式が正しくありません。", 400);
+  }
+
   // user_id は必ずサーバー側でセッションから設定する（リクエストの値は使わない）
   const row = await prisma.todo.create({
-    data: { title, userId: user.id },
+    data: {
+      title,
+      userId: user.id,
+      dueDate: dueDate ? toDbDate(dueDate) : null,
+    },
   });
 
   return Response.json({ todo: toTodo(row) } satisfies CreateTodoResponse, {
