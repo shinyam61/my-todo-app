@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 import type {
   CreateTodoRequest,
   CreateTodoResponse,
@@ -25,6 +31,15 @@ import {
   todayString,
   type DueStatus,
 } from "@/lib/due-date";
+import {
+  getSortKeyServerSnapshot,
+  getSortKeySnapshot,
+  isSortKey,
+  saveSortKey,
+  SORT_OPTIONS,
+  sortTodos,
+  subscribeSortKey,
+} from "@/lib/todo-sort";
 import { TITLE_MAX_LENGTH } from "@/lib/todos";
 import { createClient } from "@/lib/supabase/client";
 
@@ -101,6 +116,11 @@ export default function Home() {
   // 「今日」の日付。描画中に現在時刻を読むとプリレンダーでエラーになるため、
   // マウント後に設定し、画面に戻ってきたときにも計算し直す
   const [today, setToday] = useState<string | null>(null);
+  const sortKey = useSyncExternalStore(
+    subscribeSortKey,
+    getSortKeySnapshot,
+    getSortKeyServerSnapshot,
+  );
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -207,6 +227,11 @@ export default function Home() {
     router.refresh();
   }
 
+  function handleSortChange(value: string) {
+    if (isSortKey(value)) saveSortKey(value);
+  }
+
+  const sortedTodos = useMemo(() => sortTodos(todos, sortKey), [todos, sortKey]);
   const remaining = todos.filter((t) => !t.isCompleted).length;
   const parsedDueDays = parseDueDays(dueDays);
   const duePreview =
@@ -316,11 +341,27 @@ export default function Home() {
               </p>
             ) : (
               <>
-                <p className="mb-2 text-xs text-zinc-500">
-                  残り {remaining} 件 / 全 {todos.length} 件
-                </p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-zinc-500">
+                    残り {remaining} 件 / 全 {todos.length} 件
+                  </p>
+                  <label className="flex items-center gap-2 text-xs text-zinc-400">
+                    並び順
+                    <select
+                      value={sortKey}
+                      onChange={(e) => handleSortChange(e.target.value)}
+                      className="rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40"
+                    >
+                      {SORT_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <ul className="divide-y divide-zinc-800 border-y border-zinc-800">
-                  {todos.map((todo) => (
+                  {sortedTodos.map((todo) => (
                     <li key={todo.id} className="group flex items-center gap-3 py-3">
                       <input
                         id={`todo-${todo.id}`}
